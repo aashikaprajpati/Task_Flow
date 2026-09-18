@@ -27,6 +27,13 @@ export function AuthProvider({ children }) {
     return user;
   }, []);
 
+  const loginWithGoogle = useCallback(async (googleData) => {
+    const { user, token } = await authApi.googleLogin(googleData);
+    localStorage.setItem('taskflow_token', token);
+    setUser(user);
+    return user;
+  }, []);
+
   const register = useCallback(async (data) => {
     const { user, token } = await authApi.register(data);
     localStorage.setItem('taskflow_token', token);
@@ -41,7 +48,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, register, logout }}>
       {children}
     </AuthContext.Provider>
   );

@@ -3,6 +3,7 @@ import client from './client';
 export const authApi = {
   register: (data) => client.post('/auth/register', data).then((r) => r.data),
   login: (data) => client.post('/auth/login', data).then((r) => r.data),
+  googleLogin: (data) => client.post('/auth/google', data).then((r) => r.data),
   logout: () => client.post('/auth/logout').then((r) => r.data),
   me: () => client.get('/auth/me').then((r) => r.data),
   searchUsers: (q) => client.get('/auth/users', { params: { q } }).then((r) => r.data),
@@ -24,6 +25,7 @@ export const tasksApi = {
   update: (id, data) => client.put(`/tasks/${id}`, data).then((r) => r.data),
   move: (id, data) => client.patch(`/tasks/${id}/move`, data).then((r) => r.data),
   remove: (id) => client.delete(`/tasks/${id}`).then((r) => r.data),
+  calendar: (params) => client.get('/tasks/calendar', { params }).then((r) => r.data),
 };
 
 export const dashboardApi = {

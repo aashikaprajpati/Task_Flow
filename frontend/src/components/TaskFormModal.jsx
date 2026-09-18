@@ -1,6 +1,6 @@
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { Trash2 } from 'lucide-react';
 import { taskSchema } from '../lib/schemas';
 import Modal from './Modal';
@@ -10,9 +10,22 @@ import { tasksApi } from '../api/endpoints';
 import { useToast } from '../context/ToastContext';
 import { toInputDate } from '../lib/utils';
 
-export default function TaskFormModal({ open, onClose, onSaved, onDeleted, task, projectId, defaultStatus, members }) {
+export default function TaskFormModal({
+  open,
+  onClose,
+  onSaved,
+  onDeleted,
+  task,
+  projectId,
+  defaultStatus,
+  members = [],
+  projects = [],
+  initialDueDate,
+}) {
   const toast = useToast();
   const isEdit = Boolean(task);
+  const [selectedProjectId, setSelectedProjectId] = useState(projectId || projects[0]?.id || null);
+
   const {
     register,
     handleSubmit,
@@ -23,28 +36,35 @@ export default function TaskFormModal({ open, onClose, onSaved, onDeleted, task,
 
   useEffect(() => {
     if (open) {
+      const pid = task?.projectId || projectId || projects[0]?.id || null;
+      setSelectedProjectId(pid);
       reset({
         title: task?.title || '',
         description: task?.description || '',
         status: task?.status || defaultStatus || 'todo',
         priority: task?.priority || 'medium',
-        dueDate: toInputDate(task?.dueDate),
+        dueDate: toInputDate(task?.dueDate) || initialDueDate || '',
         assigneeId: task?.assigneeId ? String(task.assigneeId) : '',
       });
     }
-  }, [open, task, defaultStatus, reset]);
+  }, [open, task, defaultStatus, projectId, projects, initialDueDate, reset]);
 
   const onSubmit = async (data) => {
+    const finalProjectId = selectedProjectId || projectId;
+    if (!finalProjectId) {
+      toast.error('Please select a department or project.');
+      return;
+    }
     const payload = {
       ...data,
-      projectId,
+      projectId: Number(finalProjectId),
       assigneeId: data.assigneeId ? Number(data.assigneeId) : null,
       dueDate: data.dueDate || null,
     };
     try {
       const result = isEdit ? await tasksApi.update(task.id, payload) : await tasksApi.create(payload);
       toast.success(isEdit ? 'Task updated.' : 'Task created.');
-      onSaved(result.task);
+      if (onSaved) onSaved(result.task);
       onClose();
     } catch (err) {
       if (err.fieldErrors) {
@@ -56,10 +76,11 @@ export default function TaskFormModal({ open, onClose, onSaved, onDeleted, task,
   };
 
   const handleDelete = async () => {
+    if (!task) return;
     try {
       await tasksApi.remove(task.id);
       toast.success('Task deleted.');
-      onDeleted(task.id);
+      if (onDeleted) onDeleted(task.id);
       onClose();
     } catch (err) {
       toast.error(err.message || 'Could not delete the task.');
@@ -69,6 +90,21 @@ export default function TaskFormModal({ open, onClose, onSaved, onDeleted, task,
   return (
     <Modal open={open} onClose={onClose} title={isEdit ? 'Edit task' : 'New task'}>
       <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
+        {projects.length > 0 && !projectId && (
+          <Field label="Department / Project">
+            <Select
+              value={selectedProjectId || ''}
+              onChange={(e) => setSelectedProjectId(Number(e.target.value))}
+            >
+              {projects.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.title}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
+
         <Field label="Title" htmlFor="title" error={errors.title?.message}>
           <Input id="title" placeholder="e.g. Design the login screen" {...register('title')} />
         </Field>
