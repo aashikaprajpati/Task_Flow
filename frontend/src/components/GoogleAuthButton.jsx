@@ -4,15 +4,13 @@ import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import Modal from './Modal';
 import Button from './Button';
-import { Input, Field, Select } from './FormField';
+import { Field, Select } from './FormField';
 
 export default function GoogleAuthButton({ label = 'Continue with Google' }) {
   const { loginWithGoogle } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
   const [modalOpen, setModalOpen] = useState(false);
-  const [customEmail, setCustomEmail] = useState('');
-  const [customName, setCustomName] = useState('');
   const [loading, setLoading] = useState(false);
   const [companyType, setCompanyType] = useState('agency');
   const isSignup = label.toLowerCase().includes('sign up');
@@ -72,8 +70,22 @@ export default function GoogleAuthButton({ label = 'Continue with Google' }) {
       >
         <div className="flex flex-col gap-4">
           <p className="text-xs text-ink-soft leading-relaxed">
-            Choose a Google account or enter custom credentials to authenticate via Google OAuth.
+            No Google Cloud project is configured for this environment, so sign-in is limited to
+            these fixed demo accounts (they cannot be used to access anyone else's account).
           </p>
+
+          {isSignup && (
+            <Field label="What kind of company do you run?">
+              <Select value={companyType} onChange={(e) => setCompanyType(e.target.value)}>
+                <option value="agency">Agency (creative, video, marketing)</option>
+                <option value="tech">Tech / Software development</option>
+                <option value="financial">Financial services</option>
+                <option value="consulting">Consulting</option>
+                <option value="production">Production / Studio</option>
+                <option value="other">Other / General team</option>
+              </Select>
+            </Field>
+          )}
 
           <div className="flex flex-col gap-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-ink-faint">
@@ -98,62 +110,11 @@ export default function GoogleAuthButton({ label = 'Continue with Google' }) {
             ))}
           </div>
 
-          <div className="relative my-1">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-surface px-2 text-ink-faint">or enter custom email</span>
-            </div>
+          <div className="flex justify-end gap-2 mt-2">
+            <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>
+              Cancel
+            </Button>
           </div>
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (customEmail.trim()) {
-                handleGoogleLogin(customEmail.trim(), customName.trim() || customEmail.split('@')[0]);
-              }
-            }}
-            className="flex flex-col gap-3"
-          >
-            <Field label="Full name (optional)">
-              <Input
-                placeholder="e.g. Maya Lin"
-                value={customName}
-                onChange={(e) => setCustomName(e.target.value)}
-              />
-            </Field>
-            <Field label="Google Email">
-              <Input
-                type="email"
-                required
-                placeholder="e.g. maya@gmail.com"
-                value={customEmail}
-                onChange={(e) => setCustomEmail(e.target.value)}
-              />
-            </Field>
-            {isSignup && (
-              <Field label="What kind of company do you run?">
-                <Select value={companyType} onChange={(e) => setCompanyType(e.target.value)}>
-                  <option value="agency">Agency (creative, video, marketing)</option>
-                  <option value="tech">Tech / Software development</option>
-                  <option value="financial">Financial services</option>
-                  <option value="consulting">Consulting</option>
-                  <option value="production">Production / Studio</option>
-                  <option value="other">Other / General team</option>
-                </Select>
-              </Field>
-            )}
-
-            <div className="flex justify-end gap-2 mt-2">
-              <Button type="button" variant="secondary" onClick={() => setModalOpen(false)}>
-                Cancel
-              </Button>
-              <Button type="submit" loading={loading} disabled={!customEmail.trim()}>
-                Continue
-              </Button>
-            </div>
-          </form>
         </div>
       </Modal>
     </>

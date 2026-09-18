@@ -1,3 +1,4 @@
+import os
 from flask import Blueprint, request, jsonify, g
 from db.database import get_db, row_to_dict, rows_to_list
 from auth.utils import hash_password, check_password, sign_token, require_auth, error_response
@@ -5,6 +6,38 @@ from auth.validation import ValidationErrors, require_str, require_email, option
 
 bp = Blueprint('auth', __name__, url_prefix='/api/auth')
 COMPANY_TYPES = ['agency', 'tech', 'financial', 'consulting', 'production', 'other']
+
+# Fixed allowlist for the no-credential demo Google sign-in fallback (used when no real
+# Google Cloud OAuth client is configured, e.g. for evaluators testing the app offline).
+# This list is intentionally hardcoded: it can NEVER be used to authenticate into an
+# arbitrary or pre-existing account, only these exact demo identities.
+DEMO_GOOGLE_EMAILS = {
+    'aashika.prajapati@gmail.com',
+    'matina.maharjan@gmail.com',
+    'samriddhi.shrestha@gmail.com',
+}
+
+
+def _verify_google_credential(credential):
+    """Cryptographically verifies a real Google ID token (from Google Identity Services).
+    Raises ValueError on any failure. Returns (email, name)."""
+    from google.oauth2 import id_token as google_id_token
+    from google.auth.transport import requests as google_requests
+
+    client_id = os.environ.get('GOOGLE_CLIENT_ID')
+    if not client_id:
+        raise ValueError('Google sign-in is not configured on this server.')
+
+    idinfo = google_id_token.verify_oauth2_token(credential, google_requests.Request(), client_id)
+    if idinfo.get('aud') != client_id:
+        raise ValueError('Token audience mismatch.')
+    if idinfo.get('iss') not in ('accounts.google.com', 'https://accounts.google.com'):
+        raise ValueError('Unexpected token issuer.')
+    email = idinfo.get('email')
+    if not email or not idinfo.get('email_verified'):
+        raise ValueError("Google account email isn't verified.")
+    name = idinfo.get('name') or idinfo.get('given_name') or email.split('@')[0]
+    return email.lower().strip(), name.strip()
 
 
 @bp.post('/register')
@@ -65,32 +98,38 @@ def login():
 @bp.post('/google')
 def google_auth():
     import secrets
-    import jwt
 
     data = request.get_json(silent=True) or {}
     credential = data.get('credential')
-    email = data.get('email')
-    name = data.get('name')
     company_type = data.get('companyType') or ''
     if company_type not in COMPANY_TYPES:
         company_type = ''
 
-    # If Google ID Token is provided by Google Identity Services, decode it
-    if credential:
-        try:
-            payload = jwt.decode(credential, options={'verify_signature': False})
-            email = payload.get('email')
-            name = payload.get('name') or payload.get('given_name') or email.split('@')[0]
-        except Exception:
-            pass
-
-    if not email:
-        return error_response(422, 'A valid Google email is required.', 'email')
-
-    email = email.lower().strip()
-    name = (name or email.split('@')[0]).strip()
-
     db = get_db()
+
+    if credential:
+        # Real Google Identity Services token - verified against Google's public keys,
+        # audience (our client ID), and issuer. This is the only path that can log in
+        # to (or create) an arbitrary Google-owned email address.
+        try:
+            email, name = _verify_google_credential(credential)
+        except Exception:
+            return error_response(401, "Google sign-in verification failed. Please try again.")
+    else:
+        # No-credential fallback for offline evaluation. Deliberately restricted to a
+        # fixed demo allowlist so this can never be used to take over a real account -
+        # unlike the previous version, it does not accept an arbitrary email/name pair.
+        if os.environ.get('ALLOW_DEMO_GOOGLE_AUTH', '').lower() != 'true':
+            return error_response(422, 'Google sign-in requires a valid credential.', 'credential')
+        email = (data.get('email') or '').lower().strip()
+        name = (data.get('name') or '').strip()
+        if email not in DEMO_GOOGLE_EMAILS:
+            return error_response(
+                422, 'Demo Google sign-in only supports the listed demo accounts.', 'email'
+            )
+        if not name:
+            name = email.split('@')[0]
+
     row = db.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
 
     if not row:
